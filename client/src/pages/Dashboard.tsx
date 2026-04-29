@@ -55,10 +55,12 @@ export default function Dashboard() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   const handleFile = async (file: File) => {
-    if (!user) return;
+    if (!user) { toast.error('Not logged in'); return; }
+    console.log('Uploading:', file.name, 'user:', user.id);
     setLoading(true);
     try {
       const res = await resumeAPI.upload(file, user.id);
+      console.log('Upload OK:', res.data);
       setResume({ id: res.data.resumeId, fileName: res.data.fileName, extractedText: res.data.extractedText });
       toast.success('Resume uploaded 🎉');
       const fb = await feedbackAPI.getFeedback(res.data.resumeId);
@@ -66,7 +68,8 @@ export default function Dashboard() {
       setChat([]);
       setActiveTab('feedback');
     } catch (err: any) {
-      toast.error(err.response?.data?.message || 'Upload failed');
+      console.error('Upload error:', err?.response ?? err);
+      toast.error(err.response?.data?.message || err.message || 'Upload failed');
     } finally { setLoading(false); }
   };
 
@@ -74,6 +77,12 @@ export default function Dashboard() {
     e.preventDefault(); setDragOver(false);
     const file = e.dataTransfer.files[0];
     if (file) handleFile(file);
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (f) handleFile(f);
+    e.target.value = ''; // allow re-upload of same file
   };
 
   const handleSend = async () => {
@@ -88,13 +97,14 @@ export default function Dashboard() {
         userQuestion: question,
       });
       setChat(prev => [...prev, { role: 'assistant', content: res.data.response || res.data }]);
-    } catch { toast.error('Failed to get response'); }
-    finally { setLoading(false); }
+    } catch (err: any) {
+      console.error('Chat error:', err?.response ?? err);
+      toast.error('Failed to get response');
+    } finally { setLoading(false); }
   };
 
   return (
     <div style={S.root}>
-      {/* Header */}
       <div style={S.header}>
         <div style={S.logo}>
           <div style={S.logoIcon}>
@@ -109,7 +119,6 @@ export default function Dashboard() {
       </div>
 
       <div style={S.main}>
-        {/* Sidebar */}
         <div style={S.sidebar}>
           <div>
             <div style={S.sideLabel}>Your Resume</div>
@@ -126,7 +135,14 @@ export default function Dashboard() {
               <div style={S.uploadTitle}>{loading ? 'Analyzing...' : 'Drop your resume'}</div>
               <div style={S.uploadSub}>PDF or DOCX · click or drag</div>
             </div>
-            <input ref={fileRef} type="file" accept=".pdf,.docx" onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); }} className="hidden" style={{ display: 'none' }} />
+            {/* input OUTSIDE the clickable div to avoid event conflicts */}
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".pdf,.docx"
+              onChange={handleFileChange}
+              style={{ position: 'absolute', width: 1, height: 1, opacity: 0, pointerEvents: 'none' }}
+            />
           </div>
 
           {resume && (
@@ -141,14 +157,12 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* Tips */}
           <div style={{ marginTop: 'auto', background: 'rgba(168,85,247,0.07)', border: '1px solid rgba(168,85,247,0.15)', borderRadius: 12, padding: 14 }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: '#a855f7', marginBottom: 6 }}>PRO TIP ✨</div>
             <div style={{ fontSize: 11, color: 'rgba(148,163,184,0.6)', lineHeight: 1.6 }}>Upload your resume and ask the AI to tailor it for a specific job description.</div>
           </div>
         </div>
 
-        {/* Main content */}
         <div style={S.content}>
           {!resume ? (
             <div style={S.emptyState}>
